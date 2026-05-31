@@ -1,0 +1,344 @@
+// ── F002 · prisma/schema.prisma
+// Purpose: 17-model DB schema — SQLite for local/offline; swap provider="postgresql" + DATABASE_URL for prod
+// In: DATABASE_URL (F004) | Out: Prisma client models | See: F010
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Users & auth
+// ────────────────────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         String   // "ADMIN" | "DENTIST" | "RECEPTIONIST"
+  createdAt    DateTime @default(now())
+
+  appointmentsAsDentist Appointment[]    @relation("DentistAppointments")
+  toothRecordsNoted     ToothRecord[]
+  notesAuthored         ClinicalNote[]
+  attachmentsUploaded   Attachment[]
+  invoicesCreated       Invoice[]
+  paymentsRecorded      Payment[]
+  prescriptionsWritten  Prescription[]
+  auditLogs             AuditLog[]
+  labCasesCreated       LabCase[]      @relation("LabCasesCreated")
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Patient core + clinical metadata
+// ────────────────────────────────────────────────────────────────────
+
+model Patient {
+  id                 String   @id @default(cuid())
+  name               String
+  phone              String
+  email              String?
+  dob                DateTime?
+  gender             String?  // "Male" | "Female" | "Other"
+  address            String?
+  abhaNumber         String?  @unique
+  preferredLanguage  String   @default("en") // "en" | "te"
+  emergencyContact   String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  medicalHistory   MedicalHistory?
+  consents         Consent[]
+  toothRecords     ToothRecord[]
+  appointments     Appointment[]
+  treatmentPlans   TreatmentPlan[]
+  clinicalNotes    ClinicalNote[]
+  attachments      Attachment[]
+  invoices         Invoice[]
+  prescriptions    Prescription[]
+  labCases         LabCase[]
+
+  @@index([phone])
+  @@index([name])
+}
+
+model MedicalHistory {
+  id          String  @id @default(cuid())
+  patientId   String  @unique
+  conditions  String  @default("[]") // JSON array of strings
+  medications String  @default("[]")
+  allergies   String  @default("[]")
+  notes       String?
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+}
+
+model Consent {
+  id          String    @id @default(cuid())
+  patientId   String
+  scope       String    // "CLINICAL" | "BILLING" | "REMINDERS"
+  grantedAt   DateTime  @default(now())
+  withdrawnAt DateTime?
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([patientId])
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Odontogram
+// ────────────────────────────────────────────────────────────────────
+
+model ToothRecord {
+  id         String   @id @default(cuid())
+  patientId  String
+  toothFdi   Int      // 11–48 adult, 51–85 pediatric
+  status     String   // "HEALTHY" | "CARIES" | "FILLED" | "MISSING" | "CROWN" | "RCT" | "IMPLANT"
+  surface    String?  // "M" | "D" | "O" | "B" | "L" | "I"
+  notedById  String?
+  notes      String?
+  updatedAt  DateTime @updatedAt
+  createdAt  DateTime @default(now())
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  notedBy User?   @relation(fields: [notedById], references: [id], onDelete: SetNull)
+
+  @@unique([patientId, toothFdi, createdAt]) // history is append-only; latest by updatedAt wins for UI
+  @@index([patientId, toothFdi])
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Scheduling
+// ────────────────────────────────────────────────────────────────────
+
+model Appointment {
+  id        String   @id @default(cuid())
+  patientId String
+  dentistId String
+  chair     Int      // 1, 2, 3 — matches ClinicSettings.chairCount
+  start     DateTime
+  end       DateTime
+  status    String   @default("BOOKED") // BOOKED|CONFIRMED|ARRIVED|IN_CHAIR|COMPLETED|NO_SHOW|CANCELLED
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  dentist User    @relation("DentistAppointments", fields: [dentistId], references: [id])
+
+  clinicalNotes ClinicalNote[]
+  prescriptions Prescription[]
+
+  @@index([start])
+  @@index([dentistId, start])
+  @@index([chair, start])
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Treatment planning
+// ────────────────────────────────────────────────────────────────────
+
+model TreatmentPlan {
+  id        String   @id @default(cuid())
+  patientId String
+  title     String
+  status    String   @default("PROPOSED") // PROPOSED|ACCEPTED|IN_PROGRESS|COMPLETED|CANCELLED
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  patient    Patient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  procedures Procedure[]
+
+  @@index([patientId])
+}
+
+model Procedure {
+  id            String    @id @default(cuid())
+  planId        String
+  toothFdi      Int?
+  code          String?   // optional procedure code
+  description   String
+  costEstimate  Float     // INR
+  status        String    @default("PROPOSED") // PROPOSED|PLANNED|IN_PROGRESS|COMPLETED|CANCELLED
+  phase         Int       @default(1)
+  completedAt   DateTime?
+  billedLineId  String?   @unique
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  plan       TreatmentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  billedLine InvoiceLine?  @relation(fields: [billedLineId], references: [id], onDelete: SetNull)
+
+  @@index([planId])
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Clinical notes & attachments
+// ────────────────────────────────────────────────────────────────────
+
+model ClinicalNote {
+  id            String   @id @default(cuid())
+  patientId     String
+  appointmentId String?
+  authorId      String
+  body          String
+  createdAt     DateTime @default(now())
+
+  patient     Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  author      User         @relation(fields: [authorId], references: [id])
+
+  @@index([patientId])
+}
+
+model Attachment {
+  id            String   @id @default(cuid())
+  patientId     String
+  fileName      String
+  storagePath   String   // public/uploads/<patientId>/<file>
+  mimeType      String
+  sizeBytes     Int
+  uploadedById  String
+  uploadedAt    DateTime @default(now())
+
+  patient    Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  uploadedBy User    @relation(fields: [uploadedById], references: [id])
+
+  @@index([patientId])
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Billing
+// ────────────────────────────────────────────────────────────────────
+
+model Invoice {
+  id           String   @id @default(cuid())
+  patientId    String
+  issuedAt     DateTime @default(now())
+  status       String   @default("DRAFT") // DRAFT|SENT|PARTIALLY_PAID|PAID|CANCELLED
+  notes        String?
+  createdById  String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  patient   Patient       @relation(fields: [patientId], references: [id])
+  createdBy User          @relation(fields: [createdById], references: [id])
+  lines     InvoiceLine[]
+  payments  Payment[]
+
+  @@index([patientId])
+  @@index([status])
+}
+
+model InvoiceLine {
+  id          String  @id @default(cuid())
+  invoiceId   String
+  description String
+  amount      Float   // pre-tax INR
+  taxRate     Float   @default(18) // GST %
+  createdAt   DateTime @default(now())
+
+  invoice   Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  procedure Procedure?
+
+  @@index([invoiceId])
+}
+
+model Payment {
+  id            String   @id @default(cuid())
+  invoiceId     String
+  amount        Float
+  mode          String   // CASH|UPI|CARD
+  reference     String?  // UTR / txn id
+  paidAt        DateTime @default(now())
+  recordedById  String
+
+  invoice    Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  recordedBy User    @relation(fields: [recordedById], references: [id])
+
+  @@index([invoiceId])
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Prescriptions & lab
+// ────────────────────────────────────────────────────────────────────
+
+model Prescription {
+  id              String   @id @default(cuid())
+  patientId       String
+  appointmentId   String?
+  prescribedById  String
+  items           String   // JSON: [{drug, dosage, frequency, durationDays, instructions}]
+  notes           String?
+  createdAt       DateTime @default(now())
+
+  patient       Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  prescribedBy  User         @relation(fields: [prescribedById], references: [id])
+
+  @@index([patientId])
+}
+
+model LabCase {
+  id                String    @id @default(cuid())
+  patientId         String
+  caseType          String    @default("Other")
+  toothNumbers      String?   // comma-separated FDI numbers
+  material          String?   // PFM, Zirconia, Metal, Acrylic, etc.
+  shade             String?   // A1, A2, B1, etc.
+  labName           String?   // which external lab
+  dentistNotes      String?   // dentist instructions to lab
+  labAssistantNotes String?   // lab assistant progress notes
+  cost              Float?    // lab fee in INR
+  status            String    @default("Planned") // Planned|Impression Taken|Sent to Lab|Received|Fitted/Delivered
+  sentAt            DateTime?
+  expectedAt        DateTime?
+  deliveredAt       DateTime?
+  createdById       String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  createdBy User?   @relation("LabCasesCreated", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([patientId])
+  @@index([status])
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Audit + settings
+// ────────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String
+  action    String   // VIEW|CREATE|UPDATE|DELETE|EXPORT|LOGIN|LOGOUT
+  entity    String   // table name
+  entityId  String?
+  metadata  String?  // JSON
+  createdAt DateTime @default(now())
+
+  actor User @relation(fields: [actorId], references: [id])
+
+  @@index([entity, entityId])
+  @@index([actorId, createdAt])
+}
+
+model ClinicSettings {
+  id           Int    @id @default(1)
+  name         String
+  phone        String
+  address      String
+  gstRate      Float  @default(18)
+  chairCount   Int    @default(3)
+  hoursJson    String // JSON: {mon: {open: "09:30", close: "21:00"}, ..., sun: {open: "09:30", close: "13:00"}}
+  brandColor   String @default("#0d9488") // teal-600 accent
+  upiVpa       String @default("vedadental@upi")
+  upiPayeeName String @default("VEDA Super Speciality Dental Clinic")
+}
