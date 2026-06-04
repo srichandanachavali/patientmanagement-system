@@ -105,5 +105,20 @@ export async function PATCH(
     data: { actorId: session.userId, action: 'UPDATE', entity: 'LabCase', entityId: params.id },
   }).catch(() => {})
 
+  if (typeof status === 'string' && status === 'Received' && existing.status !== 'Received') {
+    const scheduled = new Date()
+    scheduled.setDate(scheduled.getDate() + 1)
+    scheduled.setHours(10, 0, 0, 0)
+    await prisma.followUp.create({
+      data: {
+        patientId: existing.patientId,
+        reason: `Fitting appointment — ${existing.caseType}`,
+        scheduledDate: scheduled,
+        status: 'PENDING',
+        createdById: session.userId,
+      },
+    }).catch(() => {})
+  }
+
   return NextResponse.json(serialize(updated))
 }

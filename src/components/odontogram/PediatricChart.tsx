@@ -1,95 +1,109 @@
 'use client'
 // ── F164 · src/components/odontogram/PediatricChart.tsx
-// Purpose: Pediatric FDI chart — renders PRIMARY_UPPER + PRIMARY_LOWER (teeth 51–85, 20 total)
-// In: PRIMARY_UPPER/PRIMARY_LOWER (F032), Tooth (F165), ToothState (F163) | Out: PediatricChart | See: F161, F165, F032
+// Purpose: Pediatric FDI chart — curved upper + lower primary arches (teeth 51–85, 20 total) via Tooth
+//          components with staggered entrance and arch labels.
+// In: PRIMARY_UPPER/PRIMARY_LOWER (F032), Tooth (F165), archPlacement (F210), ToothState (F163)
+// Out: PediatricChart | See: F161, F165, F210
 
 import { Tooth } from './Tooth'
 import { PRIMARY_UPPER, PRIMARY_LOWER } from '@/constants/fdi'
+import { archPlacement, fdiToUniversal } from './toothGeometry'
 import type { ToothState } from './AdultChart'
 
 interface PediatricChartProps {
-  teeth: Record<number, ToothState>
-  selectedFdi: number | null
-  onToothClick: (fdi: number) => void
+  teeth:        Record<number, ToothState>
+  selectedFdi:  number | null
+  numbering?:   'fdi' | 'universal'
+  onToothClick: (fdi: number, rect: DOMRect) => void
+  onKeyNav?:    (e: React.KeyboardEvent) => void
 }
 
-function PrimaryRow({
-  fdis,
-  teeth,
-  selectedFdi,
-  isUpperArch,
-  onToothClick,
+function ArchRow({
+  fdis, teeth, selectedFdi, isUpperArch, numbering, onToothClick, onKeyNav,
 }: {
-  fdis: number[]
-  teeth: Record<number, ToothState>
-  selectedFdi: number | null
-  isUpperArch: boolean
-  onToothClick: (fdi: number) => void
+  fdis:         number[]
+  teeth:        Record<number, ToothState>
+  selectedFdi:  number | null
+  isUpperArch:  boolean
+  numbering:    'fdi' | 'universal'
+  onToothClick: (fdi: number, rect: DOMRect) => void
+  onKeyNav?:    (e: React.KeyboardEvent) => void
 }) {
   const midpoint = fdis.length / 2
-  const left = fdis.slice(0, midpoint)
-  const right = fdis.slice(midpoint)
 
   return (
-    <div className="flex items-center justify-center gap-6">
-      <div className="flex gap-0.5">
-        {left.map((fdi) => (
-          <Tooth
+    <div className="flex items-end justify-center">
+      {fdis.map((fdi, i) => {
+        const { dy, rotate } = archPlacement(i, fdis.length, isUpperArch, 16)
+        const displayNumber  = numbering === 'universal' ? fdiToUniversal(fdi) : undefined
+        const stateGap       = i === midpoint ? 'mx-2' : ''
+        return (
+          <div
             key={fdi}
-            fdi={fdi}
-            status={teeth[fdi]?.status ?? 'Healthy'}
-            isSelected={selectedFdi === fdi}
-            isUpperArch={isUpperArch}
-            onClick={() => onToothClick(fdi)}
-          />
-        ))}
-      </div>
-      <div className="h-10 w-px bg-border" />
-      <div className="flex gap-0.5">
-        {right.map((fdi) => (
-          <Tooth
-            key={fdi}
-            fdi={fdi}
-            status={teeth[fdi]?.status ?? 'Healthy'}
-            isSelected={selectedFdi === fdi}
-            isUpperArch={isUpperArch}
-            onClick={() => onToothClick(fdi)}
-          />
-        ))}
-      </div>
+            className={stateGap}
+            style={{
+              transform:        `translateY(${dy}px) rotate(${rotate}deg)`,
+              transformOrigin:  isUpperArch ? 'center top' : 'center bottom',
+              transition:       'transform 220ms cubic-bezier(0.4, 0, 0.2, 1)',
+            }}
+          >
+            <Tooth
+              fdi={fdi}
+              status={teeth[fdi]?.status   ?? 'HEALTHY'}
+              findings={teeth[fdi]?.findings ?? []}
+              surface={teeth[fdi]?.surface ?? null}
+              isSelected={selectedFdi === fdi}
+              isUpperArch={isUpperArch}
+              displayNumber={displayNumber}
+              entranceDelayMs={i * 26}
+              onClick={(rect) => onToothClick(fdi, rect)}
+              onKeyNav={onKeyNav}
+            />
+          </div>
+        )
+      })}
     </div>
   )
 }
 
-export function PediatricChart({ teeth, selectedFdi, onToothClick }: PediatricChartProps) {
+export function PediatricChart({
+  teeth, selectedFdi, numbering = 'fdi', onToothClick, onKeyNav,
+}: PediatricChartProps) {
   return (
-    <div className="space-y-2">
+    <div role="grid" aria-label="Pediatric odontogram (FDI 51–85)" className="space-y-3">
       <div className="flex justify-between px-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-        <span>Upper arch</span>
-        <span>FDI notation — Primary (Pediatric)</span>
+        <span>Upper arch · Right (primary)</span>
+        <span>Upper arch · Left (primary)</span>
       </div>
 
-      <PrimaryRow
+      <ArchRow
         fdis={PRIMARY_UPPER}
         teeth={teeth}
         selectedFdi={selectedFdi}
         isUpperArch={true}
+        numbering={numbering}
         onToothClick={onToothClick}
+        onKeyNav={onKeyNav}
       />
 
-      <div className="mx-auto w-2/3 border-t border-dashed border-border" />
+      <div className="relative mx-auto h-4 w-full">
+        <div className="absolute inset-x-10 top-1/2 -translate-y-1/2 border-t border-dashed border-border" />
+        <div className="absolute left-1/2 top-0 h-full -translate-x-1/2 border-l border-border" />
+      </div>
 
-      <PrimaryRow
+      <ArchRow
         fdis={PRIMARY_LOWER}
         teeth={teeth}
         selectedFdi={selectedFdi}
         isUpperArch={false}
+        numbering={numbering}
         onToothClick={onToothClick}
+        onKeyNav={onKeyNav}
       />
 
       <div className="flex justify-between px-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-        <span>Lower arch</span>
-        <span>20 teeth</span>
+        <span>Lower arch · Right (primary)</span>
+        <span>Lower arch · Left (primary)</span>
       </div>
     </div>
   )

@@ -126,12 +126,16 @@ No information is duplicated across files. Each fact lives in exactly one place.
 | F155 | src/components/scheduler/AppointmentBlock.tsx | Appointment card positioned in the grid | F023 | 2026-05-31 | HIGH | F153 |
 | **ODONTOGRAM / CLINICAL** |
 | F160 | src/app/(app)/odontogram/[patientId]/page.tsx | Odontogram page — FDI tooth status view/edit | F010, F161, F162 | 2026-05-31 | HIGH | F161–F166 |
-| F161 | src/components/odontogram/Odontogram.tsx | Root odontogram — adult/pediatric mode switch | F163, F164 | 2026-05-31 | HIGH | F160, F162 |
+| F161 | src/components/odontogram/Odontogram.tsx | Root odontogram — arch + click-to-zoom focus editor; arrow-key nav | F163, F164, F211 | 2026-06-02 | HIGH | F160, F162, F211 |
 | F162 | src/components/odontogram/OdontogramWrapper.tsx | 'use client' — fetches tooth records, passes to Odontogram | F010, F161 | 2026-05-31 | HIGH | F160, F161 |
-| F163 | src/components/odontogram/AdultChart.tsx | Adult FDI chart (teeth 11–48) | F165, F032 | 2026-05-31 | HIGH | F161, F164 |
-| F164 | src/components/odontogram/PediatricChart.tsx | Pediatric FDI chart (teeth 51–85) | F165, F032 | 2026-05-31 | HIGH | F161, F163 |
-| F165 | src/components/odontogram/Tooth.tsx | Single tooth SVG with status-based fill color | F166 | 2026-05-31 | HIGH | F163, F164 |
-| F166 | src/components/odontogram/ToothStatusPicker.tsx | Status picker modal (HEALTHY/CARIES/FILLED/MISSING/etc.) | F024 | 2026-05-31 | HIGH | F165 |
+| F163 | src/components/odontogram/AdultChart.tsx | Adult FDI chart (teeth 11–48); bubbles click rect for zoom origin | F165, F032 | 2026-06-02 | HIGH | F161, F164 |
+| F164 | src/components/odontogram/PediatricChart.tsx | Pediatric FDI chart (51–85); bubbles click rect for zoom origin | F165, F032 | 2026-06-02 | HIGH | F161, F163 |
+| F165 | src/components/odontogram/Tooth.tsx | Anatomical small tooth — status fill, findings, emits DOMRect on click | F209, F210 | 2026-06-02 | HIGH | F163, F164, F211 |
+| F166 | src/components/odontogram/ToothStatusPicker.tsx | Legacy side-panel picker — superseded by F211 focus editor | F024 | 2026-06-02 | LOW  | F211 |
+| F209 | src/constants/toothConditions.ts | Single source of truth — statuses, findings, surfaces, palette + glyphs | — | 2026-05-31 | HIGH | F165, F211, F212 |
+| F210 | src/components/odontogram/toothGeometry.ts | Tooth-category map + small + LARGE anatomical geometries + arch placement | — | 2026-06-02 | HIGH | F165, F211, F212 |
+| F211 | src/components/odontogram/ToothFocusEditor.tsx | Click-to-zoom shared-element modal — status / findings / surfaces | F165, F209, F210, F212 | 2026-06-02 | HIGH | F161, F212 |
+| F212 | src/components/odontogram/ToothLargeSVG.tsx | Large anatomical tooth — 5 clickable surface regions + cervical | F209, F210 | 2026-06-02 | HIGH | F211 |
 | F167 | src/app/(app)/notes/[patientId]/page.tsx | Clinical notes list + create form | F010, F011 | 2026-05-31 | STUB | F168 |
 | F168 | src/app/(app)/treatment-plans/[patientId]/page.tsx | Treatment plan list + phase breakdown | F010, F011 | 2026-05-31 | STUB | F167 |
 | **BILLING** |

@@ -22,6 +22,9 @@ yarn-error.log*
 # local env files — NEVER commit these
 .env*.local
 .env.local
+# production secrets — NEVER commit
+.env.production
+.env.production.local
 
 # SQLite database files
 *.db

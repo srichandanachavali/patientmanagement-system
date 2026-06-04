@@ -17,7 +17,7 @@ interface InvoiceSummary {
 }
 
 const STATUS_STYLE: Record<InvoiceStatus, string> = {
-  'DRAFT':          'bg-secondary text-secondary-foreground',
+  'DRAFT':          'bg-yellow-100 text-yellow-800 border border-yellow-300',
   'SENT':           'bg-info/10 text-info',
   'PAID':           'bg-success/10 text-success',
   'PARTIALLY_PAID': 'bg-warning/10 text-warning',
@@ -26,7 +26,7 @@ const STATUS_STYLE: Record<InvoiceStatus, string> = {
 
 const STATUS_LABEL: Record<InvoiceStatus, string> = {
   'DRAFT':          'Draft',
-  'SENT':           'Sent',
+  'SENT':           'Issued',
   'PAID':           'Paid',
   'PARTIALLY_PAID': 'Partially Paid',
   'CANCELLED':      'Cancelled',
@@ -53,7 +53,12 @@ export default function BillingPage() {
           <h2 className="text-base font-semibold text-foreground">Billing</h2>
           {!isLoading && invoices.length > 0 && (
             <p className="text-xs text-muted-foreground">
-              {invoices.filter((i) => i.status !== 'PAID' && i.status !== 'CANCELLED').length} open ·{' '}
+              {invoices.filter((i) => i.status === 'DRAFT').length > 0 && (
+                <span className="mr-2 text-yellow-600 font-medium">
+                  {invoices.filter(i => i.status === 'DRAFT').length} draft ·
+                </span>
+              )}
+              {invoices.filter((i) => i.status !== 'PAID' && i.status !== 'CANCELLED' && i.status !== 'DRAFT').length} issued open ·{' '}
               <span className="text-warning font-medium">{formatCurrency(totalOutstanding)} outstanding</span>
             </p>
           )}
@@ -86,15 +91,26 @@ export default function BillingPage() {
             <Link
               key={inv.id}
               href={`/billing/${inv.id}`}
-              className="grid grid-cols-[1fr_120px_120px_100px] gap-3 border-b border-border px-5 py-3 last:border-b-0 hover:bg-surface transition-colors"
+              className={cn(
+                'grid grid-cols-[1fr_120px_120px_100px] gap-3 border-b border-border px-5 py-3 last:border-b-0 hover:bg-surface transition-colors',
+                inv.status === 'DRAFT' && 'opacity-70',
+              )}
             >
               <div>
                 <p className="text-sm font-medium text-foreground">{inv.patients?.name ?? '—'}</p>
-                <p className="text-xs text-muted-foreground">{inv.patients?.phone}</p>
+                <p className="text-xs text-muted-foreground">
+                  {inv.patients?.phone}
+                  {inv.status === 'DRAFT' && <span className="ml-2 italic text-yellow-600">not yet issued</span>}
+                </p>
               </div>
-              <span className="self-center text-sm text-muted-foreground">{formatDate(inv.issued_at)}</span>
-              <span className={cn('self-center text-sm font-medium', inv.outstanding > 0 ? 'text-warning' : 'text-success')}>
-                {formatCurrency(inv.outstanding)}
+              <span className="self-center text-sm text-muted-foreground">
+                {inv.status === 'DRAFT' ? '—' : formatDate(inv.issued_at)}
+              </span>
+              <span className={cn(
+                'self-center text-sm font-medium',
+                inv.status === 'DRAFT' ? 'text-muted-foreground italic' : inv.outstanding > 0 ? 'text-warning' : 'text-success',
+              )}>
+                {inv.status === 'DRAFT' ? 'Draft' : formatCurrency(inv.outstanding)}
               </span>
               <div className="flex items-center justify-end">
                 <span className={cn('rounded-full px-2.5 py-0.5 text-[11px] font-medium', STATUS_STYLE[inv.status])}>

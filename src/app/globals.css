@@ -57,3 +57,145 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* ── Odontogram animations (F165 / F161) ──────────────────────────────── */
+@keyframes veda-tooth-in {
+  0%   { opacity: 0; transform: translateY(8px) scale(0.92); }
+  100% { opacity: 1; transform: translateY(0)    scale(1);    }
+}
+
+@keyframes veda-pulse-ring {
+  0%   { transform: scale(1);    opacity: 0.85; }
+  70%  { transform: scale(1.18); opacity: 0;    }
+  100% { transform: scale(1.18); opacity: 0;    }
+}
+
+@keyframes veda-fill-in {
+  0%   { fill-opacity: 0; }
+  100% { fill-opacity: 1; }
+}
+
+.veda-tooth-enter {
+  animation: veda-tooth-in 380ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+.veda-tooth-body {
+  transition:
+    fill 280ms cubic-bezier(0.4, 0, 0.2, 1),
+    stroke 280ms cubic-bezier(0.4, 0, 0.2, 1),
+    filter 200ms ease-out;
+}
+
+.veda-tooth-hover:hover .veda-tooth-body {
+  filter: drop-shadow(0 4px 6px rgba(15, 23, 42, 0.18)) drop-shadow(0 0 0 rgba(37, 99, 235, 0.0));
+  transform: translateY(-2px) scale(1.04);
+}
+
+.veda-tooth-hover .veda-tooth-svg {
+  transition: transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  transform-origin: center;
+  transform-box: fill-box;
+}
+
+.veda-tooth-hover:hover .veda-tooth-svg {
+  transform: translateY(-3px) scale(1.05);
+}
+
+.veda-tooth-hover:focus-visible .veda-tooth-svg {
+  transform: translateY(-2px) scale(1.04);
+}
+
+.veda-selected-ring {
+  animation: veda-pulse-ring 1.6s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+  transform-origin: center;
+  transform-box: fill-box;
+}
+
+/* Status-apply animation — fires when a new status is tapped in the focus editor */
+@keyframes veda-status-anim {
+  0%   { transform: scale(0.86); opacity: 0; }
+  60%  { transform: scale(1.05); opacity: 1; }
+  100% { transform: scale(1);    opacity: 1; }
+}
+
+.veda-status-apply {
+  animation: veda-status-anim 250ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .veda-tooth-enter,
+  .veda-selected-ring,
+  .veda-status-apply {
+    animation: none !important;
+  }
+  .veda-tooth-hover:hover .veda-tooth-svg,
+  .veda-tooth-hover:focus-visible .veda-tooth-svg {
+    transform: none !important;
+  }
+  .veda-tooth-body {
+    transition: none !important;
+  }
+}
+
+/* ── Tooth focus editor (F211) — shared-element zoom from arch position ─────────────── */
+.veda-focus-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  opacity: 0;
+  transition: opacity 320ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.veda-focus-backdrop[data-phase="opening"] { opacity: 0; }
+.veda-focus-backdrop[data-phase="open"]    { opacity: 1; }
+.veda-focus-backdrop[data-phase="closing"] { opacity: 0; }
+
+.veda-focus-stage {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  border: 1px solid hsl(var(--border));
+  border-radius: 14px;
+  box-shadow: 0 24px 60px -12px rgba(15, 23, 42, 0.45),
+              0 8px 18px -6px rgba(15, 23, 42, 0.25);
+  overflow: hidden;
+  transform-origin: center center;
+  will-change: transform, opacity;
+  /* Opening curve has slight overshoot for a spring feel; closing is ease-out */
+  transition: transform 380ms cubic-bezier(0.34, 1.42, 0.64, 1),
+              opacity   300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.veda-focus-stage[data-phase="opening"] { opacity: 0.35; }
+.veda-focus-stage[data-phase="open"]    { opacity: 1; }
+.veda-focus-stage[data-phase="closing"] {
+  opacity: 0.25;
+  transition: transform 340ms cubic-bezier(0.4, 0, 0.2, 1),
+              opacity   280ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Surface region in the large focus tooth — subtle hover lift */
+.veda-surface-region:hover rect {
+  filter: brightness(0.97) drop-shadow(0 1px 2px rgba(15, 23, 42, 0.18));
+}
+.veda-surface-region[data-active="true"] rect {
+  filter: drop-shadow(0 1px 4px rgba(15, 23, 42, 0.20));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .veda-focus-backdrop,
+  .veda-focus-stage {
+    transition: none !important;
+  }
+  .veda-focus-backdrop[data-phase="opening"],
+  .veda-focus-backdrop[data-phase="open"]    { opacity: 1; }
+  .veda-focus-stage[data-phase="opening"],
+  .veda-focus-stage[data-phase="open"]       { opacity: 1; transform: translate(-50%, -50%) scale(1) !important; }
+  .veda-focus-backdrop[data-phase="closing"] { opacity: 0; }
+  .veda-focus-stage[data-phase="closing"]    { opacity: 0; transform: translate(-50%, -50%) scale(0.96) !important; }
+}

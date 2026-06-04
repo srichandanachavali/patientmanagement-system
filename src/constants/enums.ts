@@ -1,9 +1,10 @@
 // ── F031 · src/constants/enums.ts
 // Purpose: Typed arrays of all enum values — used in dropdowns, validation, and iteration
-// In: all status/mode/role types (F020–F026) | Out: APPOINTMENT_STATUSES, TOOTH_STATUSES, TOOTH_SURFACES, INVOICE_STATUSES, PAYMENT_MODES, LAB_CASE_STATUSES, LAB_CASE_TYPES, AUDIT_ACTIONS, PLAN_STATUSES, PROCEDURE_STATUSES, ATTACHMENT_TYPES, USER_ROLES, CONSENT_SCOPES | See: F020–F026
+// In: types (F020–F026), toothConditions (F209) | Out: all status/type arrays | See: F020–F026, F209
 import type {
   AppointmentStatus,
   ToothStatus,
+  ToothFinding,
   ToothSurface,
   InvoiceStatus,
   PaymentMode,
@@ -17,15 +18,18 @@ import type {
   ConsentScope,
 } from '@/types'
 
+import { PRIMARY_STATUSES, TOOTH_FINDINGS as _FINDINGS } from '@/constants/toothConditions'
+
 export const APPOINTMENT_STATUSES: AppointmentStatus[] = [
   'BOOKED', 'CONFIRMED', 'ARRIVED', 'IN_CHAIR', 'COMPLETED', 'NO_SHOW', 'CANCELLED',
 ]
 
-export const TOOTH_STATUSES: ToothStatus[] = [
-  'HEALTHY', 'CARIES', 'FILLED', 'MISSING', 'CROWN', 'RCT', 'IMPLANT',
-]
+// Derived from toothConditions.ts — single source of truth
+export const TOOTH_STATUSES: ToothStatus[] = PRIMARY_STATUSES as ToothStatus[]
 
-export const TOOTH_SURFACES: ToothSurface[] = ['M', 'D', 'O', 'B', 'L']
+export const TOOTH_FINDINGS: ToothFinding[] = _FINDINGS as ToothFinding[]
+
+export const TOOTH_SURFACES: ToothSurface[] = ['M', 'D', 'O', 'B', 'L', 'C']
 
 export const INVOICE_STATUSES: InvoiceStatus[] = [
   'DRAFT', 'SENT', 'PAID', 'PARTIALLY_PAID', 'CANCELLED',

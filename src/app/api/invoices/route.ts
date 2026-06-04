@@ -33,7 +33,8 @@ export async function GET(_req: Request) {
     issued_at:   inv.issuedAt.toISOString(),
     status:      inv.status,
     patients:    inv.patient,
-    outstanding: outstanding(inv.lines, inv.payments),
+    // DRAFT invoices are not yet issued — outstanding is 0 until finalized
+    outstanding: inv.status === 'DRAFT' ? 0 : outstanding(inv.lines, inv.payments),
   })))
 }
 

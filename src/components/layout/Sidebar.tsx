@@ -13,6 +13,8 @@ import {
   BarChart2,
   Settings2,
   ShieldCheck,
+  CalendarCheck2,
+  Star,
 } from 'lucide-react'
 import { NavItem } from './NavItem'
 import { CLINIC_NAME } from '@/constants/clinic'
@@ -31,6 +33,7 @@ const NAV_GROUPS = [
       { href: '/appointments', label: 'Appointments', Icon: CalendarDays },
       { href: '/billing', label: 'Billing', Icon: Receipt },
       { href: '/lab', label: 'Lab Cases', Icon: FlaskConical },
+      { href: '/follow-ups', label: 'Follow-ups', Icon: CalendarCheck2 },
     ],
   },
   {
@@ -38,6 +41,7 @@ const NAV_GROUPS = [
     items: [
       { href: '/recalls', label: 'Recalls', Icon: RotateCcw },
       { href: '/analytics', label: 'Analytics', Icon: BarChart2 },
+      { href: '/feedback', label: 'Feedback', Icon: Star },
     ],
   },
   {

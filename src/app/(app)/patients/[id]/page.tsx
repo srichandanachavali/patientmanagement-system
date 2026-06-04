@@ -6,14 +6,21 @@ import { notFound } from 'next/navigation'
 import {
   Phone, Mail, MapPin, User, ShieldCheck, CalendarDays,
   Paperclip, ChevronLeft, Pencil, CalendarPlus, Clock, FlaskConical, Plus,
+  CalendarCheck2, Star,
 } from 'lucide-react'
 import { prisma } from '@/lib/db'
 import { cn, formatDate, formatTime } from '@/lib/utils'
 import { AllergyBanner } from '@/components/patients/AllergyBanner'
 import { AttachmentUploader } from '@/components/patients/AttachmentUploader'
+import { ChecklistCard } from '@/components/patients/ChecklistCard'
+import { ClinicalPhotos } from '@/components/patients/ClinicalPhotos'
 
 function parseArr(s: string): string[] {
   try { return JSON.parse(s) } catch { return [] }
+}
+
+function isImagePath(p: string) {
+  return /\.(jpe?g|png|webp|gif)$/i.test(p)
 }
 
 const SCOPE_LABEL: Record<string, string> = {
@@ -75,6 +82,10 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
     : null
 
   const activeConsents = patient.consents.filter((c) => !c.withdrawnAt)
+
+  const docAttachments = patient.attachments.filter(att =>
+    !((['XRAY', 'BEFORE', 'AFTER'].includes(att.category)) && isImagePath(att.storagePath))
+  )
 
   return (
     <div className="space-y-5">
@@ -172,6 +183,9 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
         {/* Left column */}
         <div className="space-y-5">
 
+          {/* Safety checklist */}
+          <ChecklistCard patientId={patient.id} />
+
           {/* Medical history */}
           <div className="rounded-lg border border-border bg-background">
             <div className="border-b border-border px-5 py-3">
@@ -262,9 +276,9 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
             </div>
             <div className="p-5 space-y-4">
               <AttachmentUploader patientId={patient.id} />
-              {patient.attachments.length > 0 && (
+              {docAttachments.length > 0 && (
                 <div className="divide-y divide-border rounded-md border border-border">
-                  {patient.attachments.map((att) => (
+                  {docAttachments.map((att) => (
                     <a
                       key={att.id}
                       href={att.storagePath}
@@ -285,6 +299,9 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
               )}
             </div>
           </div>
+
+          {/* Clinical photo gallery */}
+          <ClinicalPhotos photos={patient.attachments} />
 
           {/* Lab Cases */}
           <div className="rounded-lg border border-border bg-background">
@@ -379,6 +396,8 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
                 { href: `/odontogram/${patient.id}`, label: 'Odontogram', Icon: CalendarDays },
                 { href: `/billing?patientId=${patient.id}`, label: 'Billing', Icon: CalendarDays },
                 { href: `/lab?patientId=${patient.id}`, label: 'Lab Cases', Icon: FlaskConical },
+                { href: `/follow-ups?patientId=${patient.id}`, label: 'Follow-ups', Icon: CalendarCheck2 },
+                { href: `/feedback?patientId=${patient.id}`, label: 'Feedback', Icon: Star },
               ].map(({ href, label, Icon }) => (
                 <Link
                   key={href}

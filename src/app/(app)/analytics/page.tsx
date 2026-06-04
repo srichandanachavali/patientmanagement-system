@@ -1,6 +1,6 @@
 'use client'
 // ── F184 · src/app/(app)/analytics/page.tsx
-// Purpose: Clinic-owner analytics dashboard — revenue, appointments, patients, receivables
+// Purpose: Clinic-owner analytics dashboard — revenue, appointments, patients (full), receivables
 // In: GET /api/analytics (F196) | Out: AnalyticsPage | See: F196, F012
 
 import { useState, useEffect } from 'react'
@@ -11,7 +11,10 @@ import {
   ResponsiveContainer,
   XAxis, YAxis, Tooltip, Legend, CartesianGrid,
 } from 'recharts'
-import { TrendingUp, Users, Calendar, FlaskConical, AlertTriangle, Clock, IndianRupee } from 'lucide-react'
+import {
+  TrendingUp, Users, Calendar, FlaskConical, AlertTriangle,
+  Clock, IndianRupee, UserCheck, UserX, Activity,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -46,6 +49,13 @@ interface AnalyticsPayload {
     total_active: number
     new_in_range: number
     returning_in_range: number
+    with_outstanding: number
+    lapsed: number
+    gender_split: { name: string; value: number }[]
+    age_groups: { label: string; count: number }[]
+    new_per_month: { month: string; count: number }[]
+    top_by_visits: { id: string; name: string; visits: number }[]
+    top_by_revenue: { id: string; name: string; revenue: number }[]
     top_procedures: { name: string; count: number; revenue: number }[]
   }
   receivables: {
@@ -58,22 +68,14 @@ interface AnalyticsPayload {
 
 type Range = 'month' | '3month' | 'all'
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
 function fmt(n: number) {
   return '₹' + n.toLocaleString('en-IN')
 }
 
-// ── Sub-components ────────────────────────────────────────────────────────────
-
 function StatCard({
   label, value, sub, icon: Icon, accent,
 }: {
-  label: string
-  value: string
-  sub?: string
-  icon: React.ElementType
-  accent?: string
+  label: string; value: string; sub?: string; icon: React.ElementType; accent?: string
 }) {
   return (
     <div className="rounded-lg border border-border bg-background p-4">
@@ -166,7 +168,6 @@ export default function AnalyticsPage() {
           {/* ── 1. Revenue ── */}
           <section className="space-y-3">
             <SectionHead title="Revenue" />
-
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <StatCard label="Today" value={fmt(data.revenue.today)} icon={IndianRupee} />
               <StatCard label="This week" value={fmt(data.revenue.this_week)} icon={IndianRupee} />
@@ -178,8 +179,6 @@ export default function AnalyticsPage() {
                 accent={data.revenue.outstanding > 0 ? 'text-warning' : undefined}
               />
             </div>
-
-            {/* 6-month collected trend */}
             <div className="rounded-lg border border-border bg-background p-4">
               <p className="mb-3 text-xs font-medium text-muted-foreground">Collected — last 6 months</p>
               {data.revenue.monthly_trend.every(m => m.collected === 0) ? (
@@ -190,18 +189,9 @@ export default function AnalyticsPage() {
                     <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                     <XAxis dataKey="month" tick={AXIS_STYLE} />
                     <YAxis tick={AXIS_STYLE} tickFormatter={v => '₹' + (v / 1000).toFixed(0) + 'k'} />
-                    <Tooltip
-                      contentStyle={TIP_STYLE}
-                      formatter={(v) => [fmt(Number(v)), 'Collected']}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="collected"
-                      stroke="#6366f1"
-                      strokeWidth={2}
-                      dot={{ r: 3, fill: '#6366f1' }}
-                      activeDot={{ r: 5 }}
-                    />
+                    <Tooltip contentStyle={TIP_STYLE} formatter={(v) => [fmt(Number(v)), 'Collected']} />
+                    <Line type="monotone" dataKey="collected" stroke="#6366f1" strokeWidth={2}
+                      dot={{ r: 3, fill: '#6366f1' }} activeDot={{ r: 5 }} />
                   </LineChart>
                 </ResponsiveContainer>
               )}
@@ -211,9 +201,7 @@ export default function AnalyticsPage() {
           {/* ── 2. Appointments ── */}
           <section className="space-y-3">
             <SectionHead title="Appointments" />
-
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {/* Status breakdown */}
               <div className="rounded-lg border border-border bg-background p-4">
                 <p className="mb-3 text-xs font-medium text-muted-foreground">By status</p>
                 {Object.keys(data.appointments.by_status).length === 0 ? (
@@ -223,16 +211,8 @@ export default function AnalyticsPage() {
                   return (
                     <ResponsiveContainer width="100%" height={180}>
                       <PieChart>
-                        <Pie
-                          data={pieData}
-                          cx="50%" cy="50%"
-                          innerRadius={45} outerRadius={70}
-                          paddingAngle={2}
-                          dataKey="value"
-                        >
-                          {pieData.map((_, i) => (
-                            <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-                          ))}
+                        <Pie data={pieData} cx="50%" cy="50%" innerRadius={45} outerRadius={70} paddingAngle={2} dataKey="value">
+                          {pieData.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
                         </Pie>
                         <Tooltip contentStyle={TIP_STYLE} />
                         <Legend iconSize={10} wrapperStyle={{ fontSize: 10 }} />
@@ -241,8 +221,6 @@ export default function AnalyticsPage() {
                   )
                 })()}
               </div>
-
-              {/* By day bar */}
               <div className="rounded-lg border border-border bg-background p-4">
                 <p className="mb-3 text-xs font-medium text-muted-foreground">Busiest days</p>
                 {data.appointments.by_day.every(d => d.count === 0) ? (
@@ -260,8 +238,6 @@ export default function AnalyticsPage() {
                 )}
               </div>
             </div>
-
-            {/* By hour */}
             <div className="rounded-lg border border-border bg-background p-4">
               <p className="mb-3 text-xs font-medium text-muted-foreground">Busiest hours (9 AM – 9 PM)</p>
               {data.appointments.by_hour.every(h => h.count === 0) ? (
@@ -278,8 +254,6 @@ export default function AnalyticsPage() {
                 </ResponsiveContainer>
               )}
             </div>
-
-            {/* No-show % by month */}
             <div className="rounded-lg border border-border bg-background p-4">
               <p className="mb-3 text-xs font-medium text-muted-foreground">No-show rate — last 6 months</p>
               {data.appointments.no_show_by_month.every(m => m.pct === 0) ? (
@@ -290,17 +264,8 @@ export default function AnalyticsPage() {
                     <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                     <XAxis dataKey="month" tick={AXIS_STYLE} />
                     <YAxis tick={AXIS_STYLE} tickFormatter={v => v + '%'} domain={[0, 100]} />
-                    <Tooltip
-                      contentStyle={TIP_STYLE}
-                      formatter={(v) => [Number(v) + '%', 'No-show rate']}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="pct"
-                      stroke="#ef4444"
-                      strokeWidth={2}
-                      dot={{ r: 3, fill: '#ef4444' }}
-                    />
+                    <Tooltip contentStyle={TIP_STYLE} formatter={(v) => [Number(v) + '%', 'No-show rate']} />
+                    <Line type="monotone" dataKey="pct" stroke="#ef4444" strokeWidth={2} dot={{ r: 3, fill: '#ef4444' }} />
                   </LineChart>
                 </ResponsiveContainer>
               )}
@@ -310,7 +275,6 @@ export default function AnalyticsPage() {
           {/* ── 3. Treatment Plans + Recalls + Lab ── */}
           <section className="space-y-3">
             <SectionHead title="Treatment Plans, Recalls & Lab" />
-
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <StatCard
                 label="Plan acceptance"
@@ -322,15 +286,11 @@ export default function AnalyticsPage() {
               <StatCard
                 label="Recalls this month"
                 value={String(data.recalls.due_this_month)}
-                sub="patients overdue 6+ months"
+                sub="overdue 6+ months"
                 icon={Clock}
                 accent={data.recalls.due_this_month > 0 ? 'text-warning' : undefined}
               />
-              <StatCard
-                label="Lab cases open"
-                value={String(data.lab_cases.open)}
-                icon={FlaskConical}
-              />
+              <StatCard label="Lab cases open" value={String(data.lab_cases.open)} icon={FlaskConical} />
               <StatCard
                 label="Lab overdue"
                 value={String(data.lab_cases.overdue)}
@@ -338,7 +298,6 @@ export default function AnalyticsPage() {
                 accent={data.lab_cases.overdue > 0 ? 'text-danger' : undefined}
               />
             </div>
-
             {data.treatment_plans.total > 0 && (() => {
               const planPie = [
                 { name: 'Proposed',    value: data.treatment_plans.proposed },
@@ -368,23 +327,147 @@ export default function AnalyticsPage() {
           <section className="space-y-3">
             <SectionHead title="Patients" />
 
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {/* Summary stats row */}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
               <StatCard label="Total active" value={String(data.patients.total_active)} icon={Users} />
               <StatCard
                 label="New in period"
                 value={String(data.patients.new_in_range)}
                 sub={rangeLabel}
-                icon={Users}
+                icon={UserCheck}
                 accent="text-success"
               />
               <StatCard
                 label="Returning"
                 value={String(data.patients.returning_in_range)}
-                sub="completed appt. in period"
+                sub="completed appt."
                 icon={Calendar}
+              />
+              <StatCard
+                label="Outstanding balance"
+                value={String(data.patients.with_outstanding)}
+                sub="patients with dues"
+                icon={IndianRupee}
+                accent={data.patients.with_outstanding > 0 ? 'text-warning' : undefined}
+              />
+              <StatCard
+                label="Lapsed (12+ mo)"
+                value={String(data.patients.lapsed)}
+                sub="no visit in 12 months"
+                icon={UserX}
+                accent={data.patients.lapsed > 0 ? 'text-danger' : undefined}
               />
             </div>
 
+            {/* New patients per month trend */}
+            <div className="rounded-lg border border-border bg-background p-4">
+              <p className="mb-3 text-xs font-medium text-muted-foreground">New patient registrations — last 6 months</p>
+              {data.patients.new_per_month.every(m => m.count === 0) ? (
+                <EmptyChart msg="No new patients in the last 6 months" />
+              ) : (
+                <ResponsiveContainer width="100%" height={160}>
+                  <BarChart data={data.patients.new_per_month}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <XAxis dataKey="month" tick={AXIS_STYLE} />
+                    <YAxis tick={AXIS_STYLE} allowDecimals={false} />
+                    <Tooltip contentStyle={TIP_STYLE} />
+                    <Bar dataKey="count" fill="#10b981" radius={[3, 3, 0, 0]} name="New patients" />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+
+            {/* Age + gender split */}
+            {(data.patients.age_groups.length > 0 || data.patients.gender_split.length > 0) && (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {data.patients.age_groups.length > 0 && (
+                  <div className="rounded-lg border border-border bg-background p-4">
+                    <p className="mb-3 text-xs font-medium text-muted-foreground">Age distribution</p>
+                    <ResponsiveContainer width="100%" height={160}>
+                      <BarChart data={data.patients.age_groups}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis dataKey="label" tick={AXIS_STYLE} />
+                        <YAxis tick={AXIS_STYLE} allowDecimals={false} />
+                        <Tooltip contentStyle={TIP_STYLE} />
+                        <Bar dataKey="count" fill="#8b5cf6" radius={[3, 3, 0, 0]} name="Patients" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+                {data.patients.gender_split.length > 0 && (
+                  <div className="rounded-lg border border-border bg-background p-4">
+                    <p className="mb-3 text-xs font-medium text-muted-foreground">Gender split</p>
+                    <ResponsiveContainer width="100%" height={160}>
+                      <PieChart>
+                        <Pie data={data.patients.gender_split} cx="50%" cy="50%" innerRadius={40} outerRadius={65} paddingAngle={3} dataKey="value">
+                          {data.patients.gender_split.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+                        </Pie>
+                        <Tooltip contentStyle={TIP_STYLE} />
+                        <Legend iconSize={10} wrapperStyle={{ fontSize: 11 }} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Top patients by visits + by revenue side by side */}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {data.patients.top_by_visits.length > 0 && (
+                <div className="rounded-lg border border-border bg-background p-4">
+                  <p className="mb-3 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                    <Activity className="h-3.5 w-3.5" />
+                    Top patients by visits
+                  </p>
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-border text-left text-muted-foreground">
+                        <th className="pb-1.5 font-medium">#</th>
+                        <th className="pb-1.5 font-medium">Patient</th>
+                        <th className="pb-1.5 text-right font-medium">Visits</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {data.patients.top_by_visits.map((p, i) => (
+                        <tr key={p.id}>
+                          <td className="py-1.5 pr-2 text-muted-foreground tabular-nums">{i + 1}</td>
+                          <td className="py-1.5 text-foreground">{p.name}</td>
+                          <td className="py-1.5 text-right tabular-nums font-semibold text-primary">{p.visits}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {data.patients.top_by_revenue.length > 0 && (
+                <div className="rounded-lg border border-border bg-background p-4">
+                  <p className="mb-3 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                    <IndianRupee className="h-3.5 w-3.5" />
+                    Top patients by revenue
+                  </p>
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-border text-left text-muted-foreground">
+                        <th className="pb-1.5 font-medium">#</th>
+                        <th className="pb-1.5 font-medium">Patient</th>
+                        <th className="pb-1.5 text-right font-medium">Paid</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {data.patients.top_by_revenue.map((p, i) => (
+                        <tr key={p.id}>
+                          <td className="py-1.5 pr-2 text-muted-foreground tabular-nums">{i + 1}</td>
+                          <td className="py-1.5 text-foreground">{p.name}</td>
+                          <td className="py-1.5 text-right tabular-nums font-semibold text-success">{fmt(p.revenue)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Top procedures */}
             {data.patients.top_procedures.length > 0 && (
               <div className="rounded-lg border border-border bg-background p-4">
                 <p className="mb-3 text-xs font-medium text-muted-foreground">Top procedures by revenue</p>
@@ -393,14 +476,10 @@ export default function AnalyticsPage() {
                     <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" horizontal={false} />
                     <XAxis type="number" tick={AXIS_STYLE} tickFormatter={v => '₹' + (v / 1000).toFixed(0) + 'k'} />
                     <YAxis type="category" dataKey="name" tick={AXIS_STYLE} width={130} />
-                    <Tooltip
-                      contentStyle={TIP_STYLE}
-                      formatter={(v) => [fmt(Number(v)), 'Revenue']}
-                    />
+                    <Tooltip contentStyle={TIP_STYLE} formatter={(v) => [fmt(Number(v)), 'Revenue']} />
                     <Bar dataKey="revenue" fill="#8b5cf6" radius={[0, 3, 3, 0]} name="Revenue" />
                   </BarChart>
                 </ResponsiveContainer>
-
                 <table className="mt-4 w-full text-xs">
                   <thead>
                     <tr className="border-b border-border text-left text-muted-foreground">
@@ -426,7 +505,6 @@ export default function AnalyticsPage() {
           {/* ── 5. Receivables ── */}
           <section className="space-y-3">
             <SectionHead title="Receivables" />
-
             {(data.receivables.aged_0_30 + data.receivables.aged_31_60 + data.receivables.aged_61plus === 0) ? (
               <div className="rounded-lg border border-border bg-background p-4 text-center text-xs text-muted-foreground">
                 No outstanding balances.
@@ -447,35 +525,6 @@ export default function AnalyticsPage() {
                     <p className="mt-1 text-lg font-bold text-danger tabular-nums">{fmt(data.receivables.aged_61plus)}</p>
                   </div>
                 </div>
-
-                <div className="rounded-lg border border-border bg-background p-4">
-                  <p className="mb-3 text-xs font-medium text-muted-foreground">Aged receivables breakdown</p>
-                  <ResponsiveContainer width="100%" height={80}>
-                    <BarChart
-                      layout="vertical"
-                      data={[{
-                        label: 'Balance',
-                        d0_30:   data.receivables.aged_0_30,
-                        d31_60:  data.receivables.aged_31_60,
-                        d61plus: data.receivables.aged_61plus,
-                      }]}
-                    >
-                      <XAxis type="number" tick={AXIS_STYLE} tickFormatter={v => '₹' + (v / 1000).toFixed(0) + 'k'} />
-                      <YAxis type="category" dataKey="label" tick={AXIS_STYLE} width={50} />
-                      <Tooltip
-                        contentStyle={TIP_STYLE}
-                        formatter={(v, n) => {
-                          const label = n === 'd0_30' ? '0–30 days' : n === 'd31_60' ? '31–60 days' : '61+ days'
-                          return [fmt(Number(v)), label]
-                        }}
-                      />
-                      <Bar dataKey="d0_30"   fill="#10b981" name="d0_30"   stackId="a" />
-                      <Bar dataKey="d31_60"  fill="#f59e0b" name="d31_60"  stackId="a" />
-                      <Bar dataKey="d61plus" fill="#ef4444" name="d61plus" stackId="a" radius={[0, 3, 3, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-
                 {data.receivables.top_debtors.length > 0 && (
                   <div className="rounded-lg border border-border bg-background p-4">
                     <p className="mb-3 text-xs font-medium text-muted-foreground">Top outstanding balances</p>

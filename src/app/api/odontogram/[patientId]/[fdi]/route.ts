@@ -1,5 +1,5 @@
 // ── F081 · src/app/api/odontogram/[patientId]/[fdi]/route.ts
-// Purpose: PUT upsert tooth record (append-only history; latest by createdAt wins in UI)
+// Purpose: PUT upsert tooth record (append-only history; latest by createdAt wins in UI) — accepts status, surface, findings
 // In: veda_session (F011), Prisma ToothRecord (F002) | Out: 200 { ok: true } | See: F010, F011, F162, F160
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
@@ -19,7 +19,11 @@ export async function PUT(
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
-  const { status, surface } = body as { status: string; surface: string | null }
+  const { status, surface, findings } = body as {
+    status:   string
+    surface:  string | null
+    findings?: string[]
+  }
   if (!status) return NextResponse.json({ error: 'status is required' }, { status: 400 })
 
   const fdiNum = Number(params.fdi)
@@ -33,6 +37,7 @@ export async function PUT(
       toothFdi:   fdiNum,
       status,
       surface:    surface ?? null,
+      findings:   JSON.stringify(Array.isArray(findings) ? findings : []),
       notedById:  session.userId,
     },
   })

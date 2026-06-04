@@ -27,6 +27,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
   })
   if (!inv) return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
   if (inv.status === 'CANCELLED') return NextResponse.json({ error: 'Invoice is cancelled' }, { status: 409 })
+  if (inv.status === 'DRAFT') return NextResponse.json({ error: 'Finalize the invoice before recording a payment' }, { status: 409 })
 
   const total       = inv.lines.reduce((s, l) => s + l.amount * (1 + l.taxRate / 100), 0)
   const alreadyPaid = inv.payments.reduce((s, p) => s + p.amount, 0)

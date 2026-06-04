@@ -1,11 +1,15 @@
 // ── F160 · src/app/(app)/odontogram/[patientId]/page.tsx
-// Purpose: Odontogram page — loads latest ToothRecord per FDI from Prisma, passes to OdontogramWrapper
-// In: patientId param, Prisma ToothRecord + Patient (F002) | Out: OdontogramPage | See: F161, F162
+// Purpose: Odontogram page — loads latest ToothRecord per FDI (status+surface+findings) from Prisma, passes to OdontogramWrapper
+// In: patientId param, Prisma ToothRecord + Patient (F002) | Out: OdontogramPage | See: F161, F162, F081
 import Link from 'next/link'
 import { ChevronLeft } from 'lucide-react'
 import { prisma } from '@/lib/db'
 import { OdontogramWrapper } from '@/components/odontogram/OdontogramWrapper'
-import type { ToothStatus, ToothSurface } from '@/types'
+import type { ToothStatus, ToothFinding, ToothSurface } from '@/types'
+
+function parseFindings(raw: string): ToothFinding[] {
+  try { return JSON.parse(raw) as ToothFinding[] } catch { return [] }
+}
 
 export default async function OdontogramPage({ params }: { params: { patientId: string } }) {
   const [patient, records] = await Promise.all([
@@ -23,13 +27,14 @@ export default async function OdontogramPage({ params }: { params: { patientId: 
     return <p className="py-8 text-center text-sm text-danger">Patient not found</p>
   }
 
-  // Build initialData: latest record per FDI (records are desc by createdAt so first wins)
-  const initialData: Record<number, { status: ToothStatus; surface: ToothSurface | null }> = {}
+  // Latest record per FDI (desc by createdAt, so first wins)
+  const initialData: Record<number, { status: ToothStatus; surface: ToothSurface | null; findings: ToothFinding[] }> = {}
   for (const r of records) {
     if (!initialData[r.toothFdi]) {
       initialData[r.toothFdi] = {
-        status:  r.status  as ToothStatus,
-        surface: (r.surface ?? null) as ToothSurface | null,
+        status:   r.status   as ToothStatus,
+        surface:  (r.surface ?? null) as ToothSurface | null,
+        findings: parseFindings(r.findings),
       }
     }
   }

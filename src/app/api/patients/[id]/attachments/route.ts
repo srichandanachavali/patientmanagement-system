@@ -1,11 +1,36 @@
 // ── F062 · src/app/api/patients/[id]/attachments/route.ts
-// Purpose: GET attachment list + POST upload file → public/uploads/<patientId>/ (10 MB max)
+// Purpose: GET attachment list + POST upload → Vercel Blob (prod) or public/uploads/ (dev fallback)
 // In: veda_session (F011), multipart file, patient id | Out: Attachment[] / 201 Attachment | See: F010, F011, F061, F148
+
 import { NextResponse } from 'next/server'
-import { writeFile, mkdir } from 'fs/promises'
-import path from 'path'
 import { prisma } from '@/lib/db'
 import { requireSession } from '@/lib/session'
+
+const USE_BLOB = !!process.env.BLOB_READ_WRITE_TOKEN
+
+async function storeFile(
+  patientId: string,
+  safeName: string,
+  buffer: Buffer,
+  mimeType: string,
+): Promise<string> {
+  if (USE_BLOB) {
+    const { put } = await import('@vercel/blob')
+    const blob = await put(`patients/${patientId}/${safeName}`, buffer, {
+      access: 'public',
+      contentType: mimeType,
+    })
+    return blob.url
+  }
+
+  // Local dev fallback — write to public/uploads/
+  const { writeFile, mkdir } = await import('fs/promises')
+  const path = await import('path')
+  const uploadDir = path.join(process.cwd(), 'public', 'uploads', patientId)
+  await mkdir(uploadDir, { recursive: true })
+  await writeFile(path.join(uploadDir, safeName), buffer)
+  return `/uploads/${patientId}/${safeName}`
+}
 
 export async function GET(
   _req: Request,
@@ -27,6 +52,7 @@ export async function GET(
       storage_path: a.storagePath,
       mime_type: a.mimeType,
       size_bytes: a.sizeBytes,
+      category: a.category,
       uploaded_at: a.uploadedAt.toISOString(),
     })),
   )
@@ -54,29 +80,31 @@ export async function POST(
     return NextResponse.json({ error: 'No file provided' }, { status: 400 })
   }
 
+  const VALID_CATEGORIES = ['XRAY', 'BEFORE', 'AFTER', 'REPORT', 'CONSENT', 'OTHER']
+  const rawCategory = formData.get('category')
+  const category = (typeof rawCategory === 'string' && VALID_CATEGORIES.includes(rawCategory))
+    ? rawCategory
+    : 'OTHER'
+
   const MAX_BYTES = 10 * 1024 * 1024 // 10 MB
   if (file.size > MAX_BYTES) {
     return NextResponse.json({ error: 'File exceeds 10 MB limit' }, { status: 413 })
   }
 
-  const ext = path.extname(file.name)
   const safeName = `${Date.now()}_${file.name.replace(/[^a-z0-9._-]/gi, '_')}`
-  const uploadDir = path.join(process.cwd(), 'public', 'uploads', params.id)
-  await mkdir(uploadDir, { recursive: true })
-  const filePath = path.join(uploadDir, safeName)
-
+  const mimeType = file.type || 'application/octet-stream'
   const buffer = Buffer.from(await file.arrayBuffer())
-  await writeFile(filePath, buffer)
 
-  const storagePath = `/uploads/${params.id}/${safeName}`
+  const storagePath = await storeFile(params.id, safeName, buffer, mimeType)
 
   const attachment = await prisma.attachment.create({
     data: {
       patientId: params.id,
       fileName: file.name,
       storagePath,
-      mimeType: file.type || 'application/octet-stream',
+      mimeType,
       sizeBytes: file.size,
+      category,
       uploadedById: session.userId,
     },
   })
@@ -98,6 +126,7 @@ export async function POST(
       storage_path: attachment.storagePath,
       mime_type: attachment.mimeType,
       size_bytes: attachment.sizeBytes,
+      category: attachment.category,
       uploaded_at: attachment.uploadedAt.toISOString(),
     },
     { status: 201 },

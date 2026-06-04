@@ -2,19 +2,50 @@
 
 # VEDA Dental PMS — Environment Variables
 
-All variables must be set in Vercel Dashboard → Project → Settings → Environment Variables for production.
+All production variables must be set in Vercel Dashboard → Project → Settings → Environment Variables.
 For local development, copy `.env.example` to `.env.local` and fill in values.
-Never commit `.env.local` to git — it must be in `.gitignore`.
+**Never commit `.env.production`, `.env.production.local`, or any file with real secrets.**
+The committed `.env` file contains only safe dev defaults (SQLite path + placeholder password).
 
-| Name | Where To Get It | Which File Uses It |
-|------|-----------------|--------------------|
-| NEXT_PUBLIC_SUPABASE_URL | Supabase Dashboard → Project → Settings → API → Project URL | src/lib/supabase.ts, all server components using Supabase client |
-| NEXT_PUBLIC_SUPABASE_ANON_KEY | Supabase Dashboard → Project → Settings → API → anon public key | src/lib/supabase.ts, browser-side Supabase client |
-| SUPABASE_SERVICE_ROLE_KEY | Supabase Dashboard → Project → Settings → API → service_role secret key — **KEEP PRIVATE, never expose to browser** | src/app/api/** (server-only), migration scripts, seed scripts |
-| ANTHROPIC_API_KEY | console.anthropic.com → API Keys → Create Key | src/app/api/ai/** |
-| NEXT_PUBLIC_APP_URL | Your Vercel deployment URL e.g. https://veda-dental.vercel.app or custom domain once set up | src/app/layout.tsx (OG meta tags), Supabase Auth redirect URI config |
-| NEXTAUTH_SECRET | Run `openssl rand -base64 32` in terminal to generate | src/app/api/auth/[...nextauth]/route.ts — only if next-auth is adopted instead of Supabase Auth sessions |
-| GST_DEFAULT_RATE | Set to `18` for standard GST; confirm with clinic accountant whether dental services qualify for exemption | src/app/billing/**, src/components/InvoicePDF.tsx |
-| CLINIC_NAME | Set to `VEDA Super Speciality Dental Clinic` | src/components/PDFHeader.tsx, src/app/layout.tsx |
-| RESEND_API_KEY | resend.com → Dashboard → API Keys → Create API Key | src/app/api/email/route.ts |
-| BREVO_API_KEY | app.brevo.com → Account → SMTP & API → API Keys — fallback only | src/app/api/email/route.ts (fallback path when Resend fails) |
+---
+
+## Variables reference
+
+| Variable | Required | Where to get it | Files that use it |
+|----------|----------|-----------------|-------------------|
+| `DATABASE_URL` | **PROD + DEV** | Neon dashboard → Project → Connection Details → Connection string (include `?sslmode=require`) | `prisma/schema.prisma`, `src/lib/db.ts` (F010) |
+| `SESSION_PASSWORD` | **PROD + DEV** | Generate: `openssl rand -base64 32` — minimum 32 chars | `src/lib/session.ts` (F011) — signs/encrypts the `veda_session` cookie |
+| `BLOB_READ_WRITE_TOKEN` | **PROD only** | Vercel dashboard → Storage → Blob → your store → `.env.local` button | `src/app/api/patients/[id]/attachments/route.ts` (F062) — when absent, falls back to `public/uploads/` |
+| `NEXT_PUBLIC_APP_URL` | **PROD** | Your Vercel URL e.g. `https://veda-dental.vercel.app` | Future use (OG meta, email links) |
+
+---
+
+## Local development setup
+
+```bash
+cp .env.example .env.local
+# Edit .env.local — set DATABASE_URL to your Neon dev branch URL
+# SESSION_PASSWORD can stay as the placeholder for dev
+# BLOB_READ_WRITE_TOKEN is optional — leave blank to use public/uploads/
+npx prisma migrate deploy
+npx prisma db seed
+npm run dev
+```
+
+## Production setup (Vercel)
+
+Set each variable in Vercel Dashboard → Project → Settings → Environment Variables for the **Production** environment:
+
+1. `DATABASE_URL` — Neon production branch connection string with `?sslmode=require`
+2. `SESSION_PASSWORD` — 32+ char random string (never reuse the dev default)
+3. `BLOB_READ_WRITE_TOKEN` — from Vercel Blob store
+4. `NEXT_PUBLIC_APP_URL` — your final domain (e.g. `https://vedadental.in`)
+
+---
+
+## What is NOT needed
+
+- No Supabase keys (replaced by Neon + Prisma)
+- No Anthropic/AI keys (no AI features)
+- No email service keys (email route is a stub — returns ok without sending)
+- No NEXTAUTH_SECRET (using iron-session, not next-auth)

@@ -34,6 +34,9 @@ async function main() {
 
   // ─── Reset ───────────────────────────────────────────────────────────
   await prisma.auditLog.deleteMany()
+  await prisma.patientFeedback.deleteMany()
+  await prisma.followUp.deleteMany()
+  await prisma.patientChecklist.deleteMany()
   await prisma.payment.deleteMany()
   await prisma.invoiceLine.deleteMany()
   await prisma.invoice.deleteMany()
@@ -339,6 +342,217 @@ async function main() {
     },
   })
 
+  // ─── Patient checklists ───────────────────────────────────────────────
+  // Patient 0 (Anjali) — complete, ready for treatment
+  await prisma.patientChecklist.create({
+    data: {
+      patientId: patients[0].id,
+      drugAllergiesConfirmed: true,
+      consentRecorded: true,
+      chiefComplaintNoted: true,
+      medicalHistoryReviewed: true,
+      bpStatus: 'Normal',
+      diabeticStatus: 'No',
+      bleedingDisorder: false,
+      pregnancyStatus: 'No',
+      currentMedications: null,
+      dentalHistoryReviewed: true,
+      tobaccoHabit: 'None',
+      lastXrayDate: daysAgo(30),
+      lastXrayType: 'IOPA',
+      readyForTreatment: true,
+      lastReviewedAt: daysAgo(7),
+      lastReviewedById: drRamesh.id,
+    },
+  })
+  // Patient 1 (Vikram) — complete with HTN flag
+  await prisma.patientChecklist.create({
+    data: {
+      patientId: patients[1].id,
+      drugAllergiesConfirmed: true,
+      consentRecorded: true,
+      chiefComplaintNoted: true,
+      medicalHistoryReviewed: true,
+      bpStatus: 'Hypertensive',
+      diabeticStatus: 'Pre-diabetic',
+      bleedingDisorder: false,
+      pregnancyStatus: 'N/A',
+      currentMedications: 'Amlodipine 5mg OD, Metformin 500mg BD',
+      dentalHistoryReviewed: true,
+      tobaccoHabit: 'None',
+      lastXrayDate: daysAgo(7),
+      lastXrayType: 'OPG',
+      readyForTreatment: true,
+      lastReviewedAt: daysAgo(7),
+      lastReviewedById: drRamesh.id,
+    },
+  })
+  // Patient 3 (Suresh) — incomplete: consent + chief complaint missing
+  await prisma.patientChecklist.create({
+    data: {
+      patientId: patients[3].id,
+      drugAllergiesConfirmed: true,
+      consentRecorded: false,
+      chiefComplaintNoted: false,
+      medicalHistoryReviewed: true,
+      bpStatus: 'Hypertensive',
+      diabeticStatus: 'Type 2',
+      bleedingDisorder: false,
+      pregnancyStatus: 'N/A',
+      currentMedications: 'Metformin 1g BD, Atenolol 50mg OD',
+      dentalHistoryReviewed: true,
+      tobaccoHabit: 'None',
+      readyForTreatment: false,
+      lastReviewedAt: daysAgo(5),
+      lastReviewedById: drPriya.id,
+    },
+  })
+  // Patient 7 (Krishna Murthy) — partial: drug allergy confirmed but consent missing
+  await prisma.patientChecklist.create({
+    data: {
+      patientId: patients[7].id,
+      drugAllergiesConfirmed: true,
+      consentRecorded: false,
+      chiefComplaintNoted: true,
+      medicalHistoryReviewed: true,
+      bpStatus: 'Normal',
+      diabeticStatus: 'No',
+      bleedingDisorder: true,
+      pregnancyStatus: 'N/A',
+      currentMedications: 'Warfarin 5mg OD',
+      dentalHistoryReviewed: true,
+      tobaccoHabit: 'Chewing tobacco',
+      readyForTreatment: false,
+      lastReviewedAt: daysAgo(1),
+      lastReviewedById: drPriya.id,
+    },
+  })
+
+  // ─── Follow-ups ───────────────────────────────────────────────────────
+  await prisma.followUp.createMany({
+    data: [
+      // Overdue
+      {
+        patientId: patients[5].id, reason: 'Post-extraction review',
+        scheduledDate: new Date(Date.now() - 3 * 86_400_000),
+        status: 'PENDING', notes: 'Check socket healing, pain level post 48 extraction',
+        createdById: drRamesh.id,
+      },
+      {
+        patientId: patients[7].id, reason: 'Post-op pain check',
+        scheduledDate: new Date(Date.now() - 5 * 86_400_000),
+        status: 'PENDING', notes: 'Denture adjustment follow-up, patient reported soreness',
+        createdById: drPriya.id,
+      },
+      // Due today
+      {
+        patientId: patients[1].id, reason: 'RCT follow-up',
+        scheduledDate: new Date(new Date().setHours(11, 0, 0, 0)),
+        status: 'PENDING', notes: 'RCT 46 session 2 review — check interappointment dressing',
+        createdById: drRamesh.id,
+      },
+      {
+        patientId: patients[3].id, reason: 'Implant healing check',
+        scheduledDate: new Date(new Date().setHours(15, 0, 0, 0)),
+        status: 'PENDING', notes: 'Review osseointegration progress — implant 47',
+        createdById: drPriya.id,
+      },
+      // Due this week
+      {
+        patientId: patients[0].id, reason: 'Scaling follow-up',
+        scheduledDate: new Date(Date.now() + 2 * 86_400_000),
+        status: 'PENDING', notes: 'Review gingival health post scaling',
+        createdById: drRamesh.id,
+      },
+      {
+        patientId: patients[4].id, reason: 'Crown cementation review',
+        scheduledDate: new Date(Date.now() + 3 * 86_400_000),
+        status: 'PENDING', notes: 'Check crown fit, occlusion, patient comfort',
+        createdById: drRamesh.id,
+      },
+      {
+        patientId: patients[12].id, reason: 'General review',
+        scheduledDate: new Date(Date.now() + 5 * 86_400_000),
+        status: 'PENDING', notes: 'Post-implant consultation review',
+        createdById: drPriya.id,
+      },
+      // Done
+      {
+        patientId: patients[2].id, reason: 'Post-extraction review',
+        scheduledDate: daysAgo(10),
+        status: 'DONE', notes: 'Socket healed well, no complications',
+        createdById: drRamesh.id,
+      },
+      {
+        patientId: patients[6].id, reason: 'Suture removal',
+        scheduledDate: daysAgo(8),
+        status: 'DONE', notes: 'Sutures removed, healing satisfactory',
+        createdById: drPriya.id,
+      },
+      // Missed
+      {
+        patientId: patients[9].id, reason: 'Orthodontic adjustment',
+        scheduledDate: daysAgo(6),
+        status: 'MISSED', notes: 'Patient did not attend, needs rescheduling',
+        createdById: drPriya.id,
+      },
+    ],
+  })
+
+  // ─── Patient feedback ─────────────────────────────────────────────────
+  await prisma.patientFeedback.createMany({
+    data: [
+      {
+        patientId: patients[0].id, appointmentId: appointments[0].id,
+        rating: 5, treatmentRating: 5, staffRating: 5, waitTimeRating: 4, cleanlinessRating: 5, valueRating: 5,
+        comment: 'Excellent treatment! Dr. Ramesh is very thorough and the staff is friendly.',
+        submittedAt: daysAgo(7),
+      },
+      {
+        patientId: patients[2].id, appointmentId: appointments[2].id,
+        rating: 4, treatmentRating: 5, staffRating: 4, waitTimeRating: 3, cleanlinessRating: 5, valueRating: 4,
+        comment: 'Good treatment, waited a bit long but worth it.',
+        submittedAt: daysAgo(6),
+      },
+      {
+        patientId: patients[4].id, appointmentId: appointments[4].id,
+        rating: 5, treatmentRating: 5, staffRating: 5, waitTimeRating: 5, cleanlinessRating: 5, valueRating: 4,
+        comment: 'Crown fits perfectly. Very happy with the results!',
+        submittedAt: daysAgo(4),
+      },
+      {
+        patientId: patients[5].id, appointmentId: appointments[5].id,
+        rating: 2, treatmentRating: 3, staffRating: 3, waitTimeRating: 1, cleanlinessRating: 4, valueRating: 2,
+        comment: 'Waited over an hour for a 30 min appointment. Pain management could be better.',
+        submittedAt: daysAgo(3),
+      },
+      {
+        patientId: patients[6].id, appointmentId: appointments[6].id,
+        rating: 5, treatmentRating: 5, staffRating: 5, waitTimeRating: 5, cleanlinessRating: 5, valueRating: 5,
+        comment: 'అద్భుతమైన చికిత్స. Dr. Priya చాలా నిపుణులు. మళ్ళీ వస్తాను.',
+        submittedAt: daysAgo(2),
+      },
+      {
+        patientId: patients[7].id, appointmentId: appointments[7].id,
+        rating: 3, treatmentRating: 4, staffRating: 3, waitTimeRating: 2, cleanlinessRating: 4, valueRating: 3,
+        comment: 'Treatment was fine but the waiting area is too crowded.',
+        submittedAt: daysAgo(1),
+      },
+      {
+        patientId: patients[1].id, appointmentId: appointments[1].id,
+        rating: 5, treatmentRating: 5, staffRating: 5, waitTimeRating: 4, cleanlinessRating: 5, valueRating: 5,
+        comment: 'Best dental clinic in Vijayawada. Very professional.',
+        submittedAt: daysAgo(7),
+      },
+      {
+        patientId: patients[9].id,
+        rating: 1, treatmentRating: 2, staffRating: 2, waitTimeRating: 1, cleanlinessRating: 3, valueRating: 1,
+        comment: 'Not happy at all. Treatment caused more pain and nobody explained the procedure.',
+        submittedAt: daysAgo(14),
+      },
+    ],
+  })
+
   // ─── Audit log ───────────────────────────────────────────────────────
   await prisma.auditLog.createMany({
     data: [
@@ -353,6 +567,7 @@ async function main() {
   ${patients.length} patients (15 active + 4 churned for recall demo)
   ${appointments.length} appointments
   3 treatment plans · 6 invoices · 1 prescription · 2 clinical notes
+  4 checklists · 10 follow-ups · 8 feedback entries
   Login: admin@vedadental.in / ${DEMO_PASSWORD}
 `)
 }

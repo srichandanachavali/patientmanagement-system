@@ -7,7 +7,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -62,6 +62,9 @@ model Patient {
   invoices         Invoice[]
   prescriptions    Prescription[]
   labCases         LabCase[]
+  checklist        PatientChecklist?
+  followUps        FollowUp[]
+  feedbacks        PatientFeedback[]
 
   @@index([phone])
   @@index([name])
@@ -98,8 +101,9 @@ model ToothRecord {
   id         String   @id @default(cuid())
   patientId  String
   toothFdi   Int      // 11–48 adult, 51–85 pediatric
-  status     String   // "HEALTHY" | "CARIES" | "FILLED" | "MISSING" | "CROWN" | "RCT" | "IMPLANT"
-  surface    String?  // "M" | "D" | "O" | "B" | "L" | "I"
+  status     String   // "HEALTHY" | "CARIES" | "DEEP_CARIES" | "FILLED" | "MISSING" | "CROWN" | "RCT" | "IMPLANT"
+  surface    String?  // "M" | "D" | "O" | "B" | "L" | "C"
+  findings   String   @default("[]") // JSON: ToothFinding[] — CALCULUS|STAINS|CROWDING|GINGIVAL_RECESSION|CERVICAL_ABRASION
   notedById  String?
   notes      String?
   updatedAt  DateTime @updatedAt
@@ -133,6 +137,7 @@ model Appointment {
 
   clinicalNotes ClinicalNote[]
   prescriptions Prescription[]
+  feedbacks     PatientFeedback[]
 
   @@index([start])
   @@index([dentistId, start])
@@ -154,6 +159,7 @@ model TreatmentPlan {
 
   patient    Patient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
   procedures Procedure[]
+  followUps  FollowUp[]
 
   @@index([patientId])
 }
@@ -204,6 +210,7 @@ model Attachment {
   storagePath   String   // public/uploads/<patientId>/<file>
   mimeType      String
   sizeBytes     Int
+  category      String   @default("OTHER") // XRAY | BEFORE | AFTER | REPORT | CONSENT | OTHER
   uploadedById  String
   uploadedAt    DateTime @default(now())
 
@@ -341,4 +348,89 @@ model ClinicSettings {
   brandColor   String @default("#0d9488") // teal-600 accent
   upiVpa       String @default("vedadental@upi")
   upiPayeeName String @default("VEDA Super Speciality Dental Clinic")
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Patient safety checklist (one per patient, living document)
+// ────────────────────────────────────────────────────────────────────
+
+model PatientChecklist {
+  id        String  @id @default(cuid())
+  patientId String  @unique
+
+  // MANDATORY safety items — readyForTreatment blocked until all true
+  drugAllergiesConfirmed Boolean  @default(false)
+  consentRecorded        Boolean  @default(false)
+  chiefComplaintNoted    Boolean  @default(false)
+
+  // Clinical safety flags
+  medicalHistoryReviewed Boolean  @default(false)
+  bpStatus               String?  // "Normal" | "Hypertensive" | "Hypotensive" | "Unknown"
+  diabeticStatus         String?  // "No" | "Type1" | "Type2" | "Pre-diabetic" | "Unknown"
+  bleedingDisorder       Boolean  @default(false)
+  pregnancyStatus        String?  // "N/A" | "Yes" | "No" | "Unknown"
+  currentMedications     String?  // free text
+
+  // Dental history
+  dentalHistoryReviewed  Boolean  @default(false)
+  tobaccoHabit           String?  // "None" | "Smoking" | "Chewing tobacco" | "Areca nut" | "Multiple"
+  lastXrayDate           DateTime?
+  lastXrayType           String?  // "OPG" | "IOPA" | "Bitewing" | "CBCT"
+
+  readyForTreatment      Boolean  @default(false)
+  lastReviewedAt         DateTime?
+  lastReviewedById       String?
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Post-treatment follow-ups
+// ────────────────────────────────────────────────────────────────────
+
+model FollowUp {
+  id              String    @id @default(cuid())
+  patientId       String
+  treatmentPlanId String?
+  reason          String    // "Post-extraction review" | "RCT follow-up" | "Implant healing check" | etc.
+  scheduledDate   DateTime
+  status          String    @default("PENDING") // PENDING | DONE | MISSED
+  notes           String?
+  createdById     String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  patient       Patient        @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  treatmentPlan TreatmentPlan? @relation(fields: [treatmentPlanId], references: [id], onDelete: SetNull)
+
+  @@index([patientId])
+  @@index([scheduledDate])
+  @@index([status])
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Patient feedback / satisfaction
+// ────────────────────────────────────────────────────────────────────
+
+model PatientFeedback {
+  id                String    @id @default(cuid())
+  patientId         String
+  appointmentId     String?
+  rating            Int       // 1–5 overall
+  treatmentRating   Int?
+  staffRating       Int?
+  waitTimeRating    Int?
+  cleanlinessRating Int?
+  valueRating       Int?
+  comment           String?
+  submittedAt       DateTime  @default(now())
+
+  patient     Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+
+  @@index([patientId])
+  @@index([submittedAt])
 }

@@ -22,3 +22,5 @@ Update the Status column whenever a file is materially changed.
 | docs/ROUTES.md | All app routes, role access gates, and page purpose | Active |
 | docs/SECURITY.md | DPDP Act compliance decisions, encryption posture, role permissions | Active |
 | docs/FILEMAP.md | Complete file tree with one-line purpose for every file in the project | Active |
+| docs/REQUIREMENTS.md | Full SRS — functional, non-functional, data, compliance, traceability | Active |
+| docs/USER_GUIDE.md | Plain-language staff guide for odontogram and billing workflows | Active |

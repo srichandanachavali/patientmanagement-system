@@ -37,11 +37,9 @@ export async function GET(request: Request) {
   const { now, todayStart, weekStart, monthStart, year, month } = istNow()
   const todayEnd = new Date(todayStart.getTime() + 86_400_000)
 
-  // Window for "range" filter
   let rangeStart: Date | undefined
   if (range === 'month')  rangeStart = monthStart
   if (range === '3month') rangeStart = new Date(Date.UTC(year, month - 3, 1) - IST_MS)
-  // 'all' → rangeStart = undefined (no lower bound)
 
   const apptWhere = rangeStart ? { start: { gte: rangeStart, lte: now } } : {}
   const payWhere  = rangeStart ? { paidAt: { gte: rangeStart, lte: now } } : {}
@@ -53,7 +51,7 @@ export async function GET(request: Request) {
     prisma.payment.findMany({ where: { paidAt: { gte: monthStart, lte: now } }, select: { amount: true } }),
     prisma.payment.findMany({ where: payWhere, select: { amount: true, paidAt: true } }),
     prisma.invoice.findMany({
-      where: { status: { in: ['SENT', 'PARTIALLY_PAID', 'DRAFT'] } },
+      where: { status: { in: ['SENT', 'PARTIALLY_PAID'] } },
       select: {
         id: true, status: true, issuedAt: true,
         patient:  { select: { id: true, name: true } },
@@ -68,14 +66,12 @@ export async function GET(request: Request) {
   const weekRevenue  = sum(weekPayments)
   const monthRevenue = sum(monthPayments)
 
-  // Outstanding
   const outstanding = openInvoices.reduce((s, inv) => {
     const total = inv.lines.reduce((ls, l) => ls + l.amount * (1 + l.taxRate / 100), 0)
     const paid  = inv.payments.reduce((ps, p) => ps + p.amount, 0)
     return s + Math.max(0, total - paid)
   }, 0)
 
-  // 6-month trend (always last 6 months regardless of range)
   const sixMonthsAgoDate = new Date(Date.UTC(year, month - 5, 1) - IST_MS)
   const trendPayments = await prisma.payment.findMany({
     where: { paidAt: { gte: sixMonthsAgoDate } },
@@ -120,7 +116,6 @@ export async function GET(request: Request) {
     count: byHour[h] ?? 0,
   }))
 
-  // No-show % by month (last 6 months)
   const endedApptsByMonth = await prisma.appointment.findMany({
     where: { start: { gte: sixMonthsAgoDate }, status: { in: ['COMPLETED', 'NO_SHOW', 'CANCELLED'] } },
     select: { status: true, start: true },
@@ -156,8 +151,8 @@ export async function GET(request: Request) {
   const acceptanceRate = plans.length > 0 ? Math.round((acceptedCount / plans.length) * 100) : 0
 
   // ── 4. Recalls ──────────────────────────────────────────────────────────────
-  const sixMonthsAgo = new Date(now.getTime() - 6 * 30 * 86_400_000)
-  const oneMonthLater = new Date(now.getTime() + 30 * 86_400_000)
+  const sixMonthsAgo   = new Date(now.getTime() - 6  * 30 * 86_400_000)
+  const twelveMonthsAgo = new Date(now.getTime() - 12 * 30 * 86_400_000)
 
   const [lastCompletedAppts, futureAppts] = await Promise.all([
     prisma.appointment.findMany({
@@ -175,12 +170,13 @@ export async function GET(request: Request) {
   for (const a of lastCompletedAppts) {
     if (!lastVisit.has(a.patientId)) lastVisit.set(a.patientId, a.start)
   }
-  let recallsDueThisWeek = 0, recallsDueThisMonth = 0
+  let recallsDueThisWeek = 0, recallsDueThisMonth = 0, lapsedCount = 0
   for (const [pid, last] of lastVisit) {
     if (last < sixMonthsAgo && !futureIds.has(pid)) {
       recallsDueThisWeek++
       recallsDueThisMonth++
     }
+    if (last < twelveMonthsAgo) lapsedCount++
   }
 
   // ── 5. Lab cases ────────────────────────────────────────────────────────────
@@ -194,27 +190,104 @@ export async function GET(request: Request) {
     l.status !== 'Received' && l.status !== 'Fitted/Delivered',
   ).length
 
-  // ── 6. Patients ──────────────────────────────────────────────────────────────
-  const [allPatients, newPatients, returningAppts] = await Promise.all([
-    prisma.patient.count({ where: { name: { not: '[Erased]' } } }),
-    prisma.patient.count({
-      where: rangeStart
-        ? { createdAt: { gte: rangeStart }, name: { not: '[Erased]' } }
-        : { name: { not: '[Erased]' } },
-    }),
-    rangeStart ? prisma.appointment.findMany({
-      where: { start: { gte: rangeStart }, status: 'COMPLETED' },
-      select: { patientId: true },
-      distinct: ['patientId'],
-    }) : Promise.resolve([]),
-  ])
-  const newPatientIds = rangeStart
-    ? new Set((await prisma.patient.findMany({
-        where: { createdAt: { gte: rangeStart }, name: { not: '[Erased]' } },
-        select: { id: true },
-      })).map(p => p.id))
-    : new Set<string>()
-  const returningCount = returningAppts.filter(a => !newPatientIds.has(a.patientId)).length
+  // ── 6. Patients (full analytics) ─────────────────────────────────────────────
+  const allPatientsData = await prisma.patient.findMany({
+    where: { name: { not: '[Erased]' } },
+    select: {
+      id: true, name: true, dob: true, gender: true, createdAt: true,
+      appointments: { where: { status: 'COMPLETED' }, select: { id: true, start: true } },
+      invoices: {
+        where: { status: { notIn: ['DRAFT', 'CANCELLED'] } },
+        select: {
+          lines:    { select: { amount: true, taxRate: true } },
+          payments: { select: { amount: true } },
+        },
+      },
+    },
+  })
+
+  const totalActive = allPatientsData.length
+
+  // New patients in range
+  const newPatientIds = new Set(
+    allPatientsData
+      .filter(p => rangeStart ? p.createdAt >= rangeStart : true)
+      .map(p => p.id)
+  )
+  const newInRange = rangeStart
+    ? allPatientsData.filter(p => p.createdAt >= rangeStart).length
+    : totalActive
+
+  // Returning = had a completed appt in range, NOT new
+  const returningCount = rangeStart
+    ? allPatientsData.filter(p =>
+        !newPatientIds.has(p.id) &&
+        p.appointments.some(a => a.start >= rangeStart!)
+      ).length
+    : 0
+
+  // Age groups
+  const ageGroups = { child: 0, young: 0, adult: 0, middle: 0, senior: 0, unknown: 0 }
+  const genderSplit: Record<string, number> = {}
+  for (const p of allPatientsData) {
+    const g = p.gender ?? 'Unknown'
+    genderSplit[g] = (genderSplit[g] ?? 0) + 1
+
+    if (!p.dob) { ageGroups.unknown++; continue }
+    const age = Math.floor((Date.now() - new Date(p.dob).getTime()) / 31_557_600_000)
+    if (age < 13)      ageGroups.child++
+    else if (age < 25) ageGroups.young++
+    else if (age < 45) ageGroups.adult++
+    else if (age < 60) ageGroups.middle++
+    else               ageGroups.senior++
+  }
+  const ageGroupsArr = [
+    { label: '0–12',  count: ageGroups.child },
+    { label: '13–24', count: ageGroups.young },
+    { label: '25–44', count: ageGroups.adult },
+    { label: '45–59', count: ageGroups.middle },
+    { label: '60+',   count: ageGroups.senior },
+  ].filter(g => g.count > 0)
+
+  const genderArr = Object.entries(genderSplit).map(([name, value]) => ({ name, value }))
+
+  // New patients per month — last 6 months
+  const newPerMonthMap: Record<string, number> = {}
+  for (let i = 5; i >= 0; i--) {
+    newPerMonthMap[monthLabel(year, month - i)] = 0
+  }
+  for (const p of allPatientsData) {
+    const ist = new Date(p.createdAt.getTime() + IST_MS)
+    const key = monthLabel(ist.getUTCFullYear(), ist.getUTCMonth())
+    if (key in newPerMonthMap) newPerMonthMap[key]++
+  }
+  const newPerMonth = Object.entries(newPerMonthMap).map(([month, count]) => ({ month, count }))
+
+  // Top patients by visit count
+  const topByVisits = allPatientsData
+    .map(p => ({ id: p.id, name: p.name, visits: p.appointments.length }))
+    .sort((a, b) => b.visits - a.visits)
+    .slice(0, 8)
+    .filter(p => p.visits > 0)
+
+  // Top patients by revenue (sum of invoice line totals collected via payments)
+  const topByRevenue = allPatientsData
+    .map(p => {
+      const totalPaid = p.invoices.reduce((s, inv) => {
+        return s + inv.payments.reduce((ps, pay) => ps + pay.amount, 0)
+      }, 0)
+      return { id: p.id, name: p.name, revenue: Math.round(totalPaid) }
+    })
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 8)
+    .filter(p => p.revenue > 0)
+
+  // Patients with outstanding balance
+  const patientsWithOutstanding = openInvoices.reduce((s, inv) => {
+    const total = inv.lines.reduce((ls, l) => ls + l.amount * (1 + l.taxRate / 100), 0)
+    const paid  = inv.payments.reduce((ps, p) => ps + p.amount, 0)
+    return paid < total ? s + 1 : s
+  }, 0)
 
   // Top procedures by count + revenue (from invoice lines)
   const invoiceLines = await prisma.invoiceLine.findMany({
@@ -268,9 +341,9 @@ export async function GET(request: Request) {
       monthly_trend: monthlyTrend,
     },
     appointments: {
-      by_status:      byStatus,
-      by_day:         byDayArr,
-      by_hour:        byHourArr,
+      by_status:        byStatus,
+      by_day:           byDayArr,
+      by_hour:          byHourArr,
       no_show_by_month: noShowByMonth,
     },
     treatment_plans: {
@@ -286,14 +359,21 @@ export async function GET(request: Request) {
       overdue: labOverdue,
     },
     patients: {
-      total_active:    allPatients,
-      new_in_range:    newPatients,
-      returning_in_range: returningCount,
-      top_procedures:  topProcedures,
+      total_active:          totalActive,
+      new_in_range:          newInRange,
+      returning_in_range:    returningCount,
+      with_outstanding:      patientsWithOutstanding,
+      lapsed:                lapsedCount,
+      gender_split:          genderArr,
+      age_groups:            ageGroupsArr,
+      new_per_month:         newPerMonth,
+      top_by_visits:         topByVisits,
+      top_by_revenue:        topByRevenue,
+      top_procedures:        topProcedures,
     },
     receivables: {
-      aged_0_30:  Math.round(aged.d0_30),
-      aged_31_60: Math.round(aged.d31_60),
+      aged_0_30:   Math.round(aged.d0_30),
+      aged_31_60:  Math.round(aged.d31_60),
       aged_61plus: Math.round(aged.d61plus),
       top_debtors: topDebtors,
     },
