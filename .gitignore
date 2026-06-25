@@ -40,3 +40,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+daily_log.md
+*.pyc
+__pycache__/
+*.log
