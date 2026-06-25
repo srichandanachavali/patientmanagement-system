@@ -19,7 +19,8 @@ def truncate_text(text: str, max_len: int = 100, suffix: str = "...") -> str:
         return text
     return text[:max_len] + suffix
 
-def safe_get(d, *keys, default=None):
+def safe_get(d: dict, *keys, default=None):
+    """Safely retrieve a value from a nested dictionary."""
     for key in keys:
         if not isinstance(d, dict):
             return default
