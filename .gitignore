@@ -44,3 +44,8 @@ daily_log.md
 *.pyc
 __pycache__/
 *.log
+*.pyo
+.venv/
+venv/
+node_modules/
+.env

@@ -154,3 +154,7 @@ Set `DATABASE_URL` to your Postgres connection string. Run `prisma migrate deplo
 - Withdrawing consent marks `withdrawnAt` — no hard delete of clinical records.
 - Erasing a patient (right to erasure) replaces the name with `[Erased]` and clears PII fields.
 - Audit log records who accessed/created/updated which entity and when.
+
+## Last Updated
+
+2026-07-02
